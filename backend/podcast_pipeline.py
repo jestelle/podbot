@@ -57,9 +57,13 @@ class PodcastPipeline:
             logger.error(f"Error generating welcome podcast for user {user_id}: {e}")
             return None
     
-    def generate_daily_podcast_for_user(self, user_id: int, target_date: datetime = None) -> Optional[models.PodcastEpisode]:
+    def generate_daily_podcast_for_user(self, user_id: int, target_date: datetime = None, db: Session = None) -> Optional[models.PodcastEpisode]:
         """Generate daily podcast for a user"""
-        db = SessionLocal()
+        should_close_db = False
+        if db is None:
+            db = SessionLocal()
+            should_close_db = True
+            
         try:
             user = user_crud.get_user_by_id(db, user_id)
             if not user:
@@ -122,7 +126,8 @@ class PodcastPipeline:
             logger.error(f"Error generating daily podcast for user {user_id}: {e}")
             return None
         finally:
-            db.close()
+            if should_close_db:
+                db.close()
     
     def generate_document_podcast_for_user(self, user_id: int, document_data: Dict) -> Optional[models.PodcastEpisode]:
         """Generate document deep-dive podcast for a user"""

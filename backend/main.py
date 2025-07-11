@@ -31,7 +31,7 @@ app = FastAPI(title="Podbot API", version="1.0.0")
 create_tables()
 
 # Mount static files for audio
-app.mount("/audio", StaticFiles(directory="../audio_files"), name="audio")
+app.mount("/audio", StaticFiles(directory="audio_files"), name="audio")
 
 # CORS configuration for frontend
 app.add_middleware(
@@ -313,8 +313,8 @@ async def generate_podcast(
         )
     
     try:
-        # Generate daily podcast
-        episode = podcast_pipeline.generate_daily_podcast_for_user(user_id)
+        # Generate daily podcast, passing the database session
+        episode = podcast_pipeline.generate_daily_podcast_for_user(user_id, db=db)
         
         if episode:
             return {
@@ -353,6 +353,9 @@ async def generate_welcome_podcast(
         episode = podcast_pipeline.generate_welcome_podcast_for_user(user_id, db)
         
         if episode:
+            # Refresh the episode from the database to ensure it's attached to the session
+            episode = db.query(models.PodcastEpisode).filter(models.PodcastEpisode.id == episode.id).first()
+            
             return {
                 "success": True,
                 "episode": PodcastEpisodeResponse.model_validate(episode),
