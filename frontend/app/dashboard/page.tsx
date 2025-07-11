@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService, User, PodcastEpisode } from '@/lib/auth';
-import { PlayIcon, CalendarIcon, DocumentIcon, RssIcon, EyeIcon } from '@heroicons/react/24/outline';
+import { PlayIcon, CalendarIcon, DocumentIcon, RssIcon, EyeIcon, SparklesIcon, StopIcon } from '@heroicons/react/24/outline';
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
@@ -12,6 +12,10 @@ export default function Dashboard() {
   const [calendarData, setCalendarData] = useState<any>(null);
   const [documentsData, setDocumentsData] = useState<any>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [generatingPodcast, setGeneratingPodcast] = useState(false);
+  const [currentlyPlaying, setCurrentlyPlaying] = useState<number | null>(null);
+  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -44,6 +48,16 @@ export default function Dashboard() {
 
     loadUserData();
   }, [router]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef) {
+        audioRef.pause();
+        audioRef.currentTime = 0;
+      }
+    };
+  }, [audioRef]);
 
   const handleLogout = () => {
     authService.logout();
@@ -95,6 +109,120 @@ export default function Dashboard() {
       console.error('Failed to load documents preview:', error);
     } finally {
       setLoadingPreview(false);
+    }
+  };
+
+  const generatePodcast = async () => {
+    if (!user) return;
+    setGeneratingPodcast(true);
+    try {
+      const response = await fetch(`http://localhost:8000/generate-podcast/${user.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authService.getToken()}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        alert('Podcast generated successfully!');
+        // Refresh episodes
+        const userEpisodes = await authService.getUserEpisodes(user.id);
+        setEpisodes(userEpisodes);
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to generate podcast: ${errorData.detail}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate podcast:', error);
+      alert('Failed to generate podcast. Please try again.');
+    } finally {
+      setGeneratingPodcast(false);
+    }
+  };
+
+  const generateWelcomePodcast = async () => {
+    if (!user) return;
+    setGeneratingPodcast(true);
+    try {
+      const response = await fetch(`http://localhost:8000/generate-welcome-podcast/${user.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authService.getToken()}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        alert('Welcome podcast generated successfully!');
+        // Refresh episodes
+        const userEpisodes = await authService.getUserEpisodes(user.id);
+        setEpisodes(userEpisodes);
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to generate welcome podcast: ${errorData.detail}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate welcome podcast:', error);
+      alert('Failed to generate welcome podcast. Please try again.');
+    } finally {
+      setGeneratingPodcast(false);
+    }
+  };
+
+  const playEpisode = (episode: PodcastEpisode) => {
+    // Stop current audio if playing
+    if (audioRef) {
+      audioRef.pause();
+      audioRef.currentTime = 0;
+    }
+
+    setAudioLoading(true);
+    
+    // Create new audio element
+    const audio = new Audio(episode.audio_url);
+    setAudioRef(audio);
+    setCurrentlyPlaying(episode.id);
+
+    // Handle audio events
+    audio.addEventListener('canplaythrough', () => {
+      setAudioLoading(false);
+    });
+
+    audio.addEventListener('loadstart', () => {
+      setAudioLoading(true);
+    });
+
+    audio.addEventListener('ended', () => {
+      setCurrentlyPlaying(null);
+      setAudioRef(null);
+      setAudioLoading(false);
+    });
+
+    audio.addEventListener('error', (e) => {
+      console.error('Audio error:', e);
+      alert('Error loading audio file. The audio may not be available yet.');
+      setCurrentlyPlaying(null);
+      setAudioRef(null);
+      setAudioLoading(false);
+    });
+
+    // Play the audio
+    audio.play().catch(error => {
+      console.error('Error playing audio:', error);
+      alert('Error playing audio. Please check if the audio file exists.');
+      setCurrentlyPlaying(null);
+      setAudioRef(null);
+      setAudioLoading(false);
+    });
+  };
+
+  const stopEpisode = () => {
+    if (audioRef) {
+      audioRef.pause();
+      audioRef.currentTime = 0;
+      setCurrentlyPlaying(null);
+      setAudioRef(null);
     }
   };
 
@@ -267,6 +395,32 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Podcast Generation */}
+        <div className="card mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Generate Podcast</h2>
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={generatePodcast}
+              disabled={generatingPodcast}
+              className="btn-primary flex items-center"
+            >
+              <SparklesIcon className="h-4 w-4 mr-2" />
+              {generatingPodcast ? 'Generating...' : 'Generate Daily Podcast'}
+            </button>
+            <button
+              onClick={generateWelcomePodcast}
+              disabled={generatingPodcast}
+              className="btn-secondary flex items-center"
+            >
+              <PlayIcon className="h-4 w-4 mr-2" />
+              {generatingPodcast ? 'Generating...' : 'Generate Welcome Podcast'}
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mt-3">
+            Generate a podcast based on your current calendar and documents. This uses AI to create both the script and audio.
+          </p>
+        </div>
+
         {/* Episodes List */}
         <div className="card">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Episodes</h2>
@@ -295,7 +449,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-4">
               {episodes.map((episode) => (
-                <div key={episode.id} className="border rounded-lg p-4">
+                <div key={episode.id} className={`border rounded-lg p-4 ${currentlyPlaying === episode.id ? 'border-blue-500 bg-blue-50' : ''}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{episode.title}</h3>
@@ -311,10 +465,35 @@ export default function Dashboard() {
                       </div>
                     </div>
                     {episode.audio_url && (
-                      <button className="btn-primary ml-4">
-                        <PlayIcon className="h-4 w-4 mr-1" />
-                        Play
-                      </button>
+                      <div className="ml-4">
+                        {currentlyPlaying === episode.id ? (
+                          <button 
+                            onClick={stopEpisode}
+                            className="btn-secondary flex items-center"
+                          >
+                            <StopIcon className="h-4 w-4 mr-1" />
+                            Stop
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => playEpisode(episode)}
+                            disabled={audioLoading}
+                            className="btn-primary flex items-center disabled:opacity-50"
+                          >
+                            {audioLoading ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-1"></div>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <PlayIcon className="h-4 w-4 mr-1" />
+                                Play
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

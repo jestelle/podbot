@@ -253,13 +253,22 @@ class GoogleCalendarService:
             
             if gap > 30:  # More than 30 minutes
                 free_blocks.append({
-                    'start': current_end,
-                    'end': next_start,
+                    'start': current_end.isoformat() if hasattr(current_end, 'isoformat') else str(current_end),
+                    'end': next_start.isoformat() if hasattr(next_start, 'isoformat') else str(next_start),
                     'duration_minutes': gap
                 })
         
         # Find longest meeting
-        longest_meeting = max(events, key=lambda x: (x['end_time'] - x['start_time']).total_seconds()) if events else None
+        if events:
+            longest_event = max(events, key=lambda x: (x['end_time'] - x['start_time']).total_seconds())
+            longest_meeting = {
+                'title': longest_event['title'],
+                'duration_seconds': (longest_event['end_time'] - longest_event['start_time']).total_seconds(),
+                'start_time': longest_event['start_time'].isoformat() if hasattr(longest_event['start_time'], 'isoformat') else str(longest_event['start_time']),
+                'end_time': longest_event['end_time'].isoformat() if hasattr(longest_event['end_time'], 'isoformat') else str(longest_event['end_time'])
+            }
+        else:
+            longest_meeting = None
         
         # Count back-to-back meetings
         back_to_back = 0

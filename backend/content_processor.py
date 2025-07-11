@@ -32,9 +32,9 @@ class ContentProcessor:
             'documents_summary': self._create_documents_summary(all_documents),
             'individual_documents': self._process_individual_documents(all_documents[:5]),  # Top 5
             'raw_data': {
-                'calendar_events': calendar_events,
+                'calendar_events': self._serialize_calendar_events(calendar_events),
                 'schedule_analysis': schedule_analysis,
-                'documents': all_documents
+                'documents': self._serialize_documents(all_documents)
             }
         }
     
@@ -91,7 +91,18 @@ class ContentProcessor:
         # Long meetings
         if analysis['longest_meeting']:
             longest = analysis['longest_meeting']
-            duration = (longest['end_time'] - longest['start_time']).total_seconds() / 3600
+            # Handle both datetime objects and strings
+            if isinstance(longest['start_time'], str):
+                start_time = datetime.fromisoformat(longest['start_time'].replace('Z', '+00:00'))
+            else:
+                start_time = longest['start_time']
+            
+            if isinstance(longest['end_time'], str):
+                end_time = datetime.fromisoformat(longest['end_time'].replace('Z', '+00:00'))
+            else:
+                end_time = longest['end_time']
+                
+            duration = (end_time - start_time).total_seconds() / 3600
             if duration > 2:  # More than 2 hours
                 highlights.append(f"Long meeting: {longest['title']} ({duration:.1f} hours)")
         
@@ -111,6 +122,14 @@ class ContentProcessor:
         for event in events:
             start_time = event['start_time']
             end_time = event['end_time']
+            
+            # Handle both datetime objects and strings
+            if isinstance(start_time, str):
+                from datetime import datetime
+                start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            if isinstance(end_time, str):
+                from datetime import datetime
+                end_time = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
             
             # Format time
             if event['is_all_day']:
@@ -213,7 +232,7 @@ class ContentProcessor:
             'top_documents': [
                 {
                     'name': doc['name'],
-                    'modified_time': doc['modified_time'].strftime('%I:%M %p'),
+                    'modified_time': doc['modified_time'].strftime('%I:%M %p') if hasattr(doc['modified_time'], 'strftime') else str(doc['modified_time']),
                     'priority_score': doc['priority_score'],
                     'sources': doc['sources']
                 }
@@ -234,7 +253,7 @@ class ContentProcessor:
                     processed_docs.append({
                         'id': doc['id'],
                         'name': doc['name'],
-                        'modified_time': doc['modified_time'],
+                        'modified_time': doc['modified_time'].isoformat() if hasattr(doc['modified_time'], 'isoformat') else doc['modified_time'],
                         'web_link': doc['web_link'],
                         'content_preview': content['content'][:500] + '...' if len(content['content']) > 500 else content['content'],
                         'word_count': content['word_count'],
@@ -246,7 +265,7 @@ class ContentProcessor:
                     processed_docs.append({
                         'id': doc['id'],
                         'name': doc['name'],
-                        'modified_time': doc['modified_time'],
+                        'modified_time': doc['modified_time'].isoformat() if hasattr(doc['modified_time'], 'isoformat') else doc['modified_time'],
                         'web_link': doc['web_link'],
                         'content_preview': f"Document: {doc['name']} (content not accessible)",
                         'word_count': 0,
@@ -258,3 +277,27 @@ class ContentProcessor:
                 continue
         
         return processed_docs
+    
+    def _serialize_calendar_events(self, events: List[Dict]) -> List[Dict]:
+        """Serialize calendar events by converting datetime objects to strings"""
+        serialized_events = []
+        for event in events:
+            serialized_event = event.copy()
+            # Convert datetime objects to ISO format strings
+            if 'start_time' in serialized_event and hasattr(serialized_event['start_time'], 'isoformat'):
+                serialized_event['start_time'] = serialized_event['start_time'].isoformat()
+            if 'end_time' in serialized_event and hasattr(serialized_event['end_time'], 'isoformat'):
+                serialized_event['end_time'] = serialized_event['end_time'].isoformat()
+            serialized_events.append(serialized_event)
+        return serialized_events
+    
+    def _serialize_documents(self, documents: List[Dict]) -> List[Dict]:
+        """Serialize documents by converting datetime objects to strings"""
+        serialized_docs = []
+        for doc in documents:
+            serialized_doc = doc.copy()
+            # Convert datetime objects to ISO format strings
+            if 'modified_time' in serialized_doc and hasattr(serialized_doc['modified_time'], 'isoformat'):
+                serialized_doc['modified_time'] = serialized_doc['modified_time'].isoformat()
+            serialized_docs.append(serialized_doc)
+        return serialized_docs

@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -15,6 +16,7 @@ from auth import google_auth, jwt_auth
 from crud import user_crud, podcast_crud
 from dependencies import get_current_active_user
 from content_processor import ContentProcessor
+from podcast_pipeline import podcast_pipeline
 import models
 
 load_dotenv()
@@ -27,6 +29,9 @@ app = FastAPI(title="Podbot API", version="1.0.0")
 
 # Create database tables
 create_tables()
+
+# Mount static files for audio
+app.mount("/audio", StaticFiles(directory="../audio_files"), name="audio")
 
 # CORS configuration for frontend
 app.add_middleware(
@@ -172,11 +177,21 @@ async def get_user_rss_feed(user_id: int, db: Session = Depends(get_db)):
             detail="User not found"
         )
     
-    # TODO: Implement RSS feed generation
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="RSS feed generation not implemented yet"
-    )
+    try:
+        rss_xml = podcast_pipeline.get_user_rss_feed(user_id)
+        if rss_xml:
+            return Response(content=rss_xml, media_type="application/rss+xml")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate RSS feed"
+            )
+    except Exception as e:
+        logger.error(f"Error generating RSS feed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate RSS feed"
+        )
 
 @app.get("/users/{user_id}/calendar-preview")
 async def get_calendar_preview(
@@ -203,7 +218,7 @@ async def get_calendar_preview(
         schedule_analysis = processor.calendar_service.analyze_day_schedule(calendar_events)
         
         return {
-            "events": calendar_events,
+            "events": processor._serialize_calendar_events(calendar_events),
             "analysis": schedule_analysis,
             "calendars_info": processor.calendar_service._get_all_calendars()
         }
@@ -240,8 +255,8 @@ async def get_documents_preview(
         shared_docs = processor.docs_service.get_documents_shared_with_user(days=1)
         
         return {
-            "recent_documents": recent_docs,
-            "shared_documents": shared_docs
+            "recent_documents": processor._serialize_documents(recent_docs),
+            "shared_documents": processor._serialize_documents(shared_docs)
         }
         
     except Exception as e:
@@ -297,11 +312,64 @@ async def generate_podcast(
             detail="Access denied"
         )
     
-    # TODO: Implement podcast generation pipeline
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Podcast generation not implemented yet"
-    )
+    try:
+        # Generate daily podcast
+        episode = podcast_pipeline.generate_daily_podcast_for_user(user_id)
+        
+        if episode:
+            return {
+                "success": True,
+                "episode": PodcastEpisodeResponse.model_validate(episode),
+                "message": "Podcast generated successfully"
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate podcast"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error generating podcast: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate podcast: {str(e)}"
+        )
+
+@app.post("/generate-welcome-podcast/{user_id}")
+async def generate_welcome_podcast(
+    user_id: int,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Generate welcome podcast for a user"""
+    # Ensure user can only generate their own podcasts
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    try:
+        episode = podcast_pipeline.generate_welcome_podcast_for_user(user_id, db)
+        
+        if episode:
+            return {
+                "success": True,
+                "episode": PodcastEpisodeResponse.model_validate(episode),
+                "message": "Welcome podcast generated successfully"
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate welcome podcast"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error generating welcome podcast: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate welcome podcast: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
