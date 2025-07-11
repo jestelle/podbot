@@ -193,6 +193,33 @@ async def get_user_rss_feed(user_id: int, db: Session = Depends(get_db)):
             detail="Failed to generate RSS feed"
         )
 
+@app.get("/rss/{feed_id}")
+async def get_rss_feed_by_id(feed_id: str, db: Session = Depends(get_db)):
+    """Get RSS feed by UUID"""
+    try:
+        # Find user by RSS feed URL
+        user = db.query(models.User).filter(models.User.rss_feed_url == f"/rss/{feed_id}").first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="RSS feed not found"
+            )
+        
+        rss_xml = podcast_pipeline.get_user_rss_feed(user.id)
+        if rss_xml:
+            return Response(content=rss_xml, media_type="application/rss+xml")
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate RSS feed"
+            )
+    except Exception as e:
+        logger.error(f"Error generating RSS feed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate RSS feed"
+        )
+
 @app.get("/users/{user_id}/calendar-preview")
 async def get_calendar_preview(
     user_id: int,

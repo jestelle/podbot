@@ -1,10 +1,13 @@
 from feedgen.feed import FeedGenerator
 from feedgen.entry import FeedEntry
 from typing import List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 import os
+import logging
 from config import settings
 import models
+
+logger = logging.getLogger(__name__)
 
 class RSSFeedGenerator:
     def __init__(self):
@@ -23,16 +26,21 @@ class RSSFeedGenerator:
         fg.description(f"Personalized daily podcast for {user.email}")
         fg.author({'name': 'Podbot', 'email': 'noreply@podbot.com'})
         fg.language('en')
-        fg.lastBuildDate(datetime.utcnow())
+        fg.lastBuildDate(datetime.now(timezone.utc))
         fg.generator('Podbot Podcast Generator')
         
-        # Podcast-specific metadata
-        fg.podcast.itunes_category('News', 'Daily News')
-        fg.podcast.itunes_author('Podbot')
-        fg.podcast.itunes_summary(f"Your personalized daily briefing podcast, created automatically from your calendar and documents.")
-        fg.podcast.itunes_owner(name='Podbot', email='noreply@podbot.com')
-        fg.podcast.itunes_image(f"{self.base_url}/static/podcast-cover.jpg")
-        fg.podcast.itunes_explicit('clean')
+        # Load podcast extension once
+        try:
+            fg.load_extension('podcast')
+            # Podcast-specific metadata for iTunes
+            fg.podcast.itunes_category('News', 'Daily News')
+            fg.podcast.itunes_author('Podbot')
+            fg.podcast.itunes_summary(f"Your personalized daily briefing podcast, created automatically from your calendar and documents.")
+            fg.podcast.itunes_owner(name='Podbot', email='noreply@podbot.com')
+            fg.podcast.itunes_image(f"{self.base_url}/static/podcast-cover.jpg")
+            fg.podcast.itunes_explicit('clean')
+        except Exception as e:
+            logger.warning(f"Could not load podcast extension: {e}")
         
         # Add episodes
         for episode in episodes:
@@ -42,14 +50,22 @@ class RSSFeedGenerator:
                 fe.title(episode.title)
                 fe.description(episode.description)
                 fe.enclosure(episode.audio_url, str(episode.file_size_bytes), 'audio/mpeg')
-                fe.pubDate(episode.published_at)
+                # Handle timezone-naive datetime objects
+                pub_date = episode.published_at
+                if pub_date.tzinfo is None:
+                    pub_date = pub_date.replace(tzinfo=timezone.utc)
+                fe.pubDate(pub_date)
                 fe.guid(f"{self.base_url}/episode/{episode.id}")
                 
                 # Episode-specific metadata
-                fe.podcast.itunes_author('Podbot')
-                fe.podcast.itunes_duration(self._format_duration(episode.duration_seconds))
-                fe.podcast.itunes_explicit('clean')
-                fe.podcast.itunes_episode_type('full')
+                try:
+                    fe.load_extension('podcast')
+                    fe.podcast.itunes_author('Podbot')
+                    fe.podcast.itunes_duration(self._format_duration(episode.duration_seconds))
+                    fe.podcast.itunes_explicit('clean')
+                    fe.podcast.itunes_episode_type('full')
+                except Exception as e:
+                    logger.warning(f"Could not load podcast extension for episode {episode.id}: {e}")
         
         return fg.rss_str(pretty=True).decode('utf-8')
     
