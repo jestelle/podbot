@@ -1,4 +1,4 @@
-.PHONY: help install dev build test clean docker-build docker-up docker-down
+.PHONY: help install dev build test clean docker-build docker-up docker-down backend frontend
 
 help:
 	@echo "Available commands:"
@@ -16,7 +16,22 @@ install:
 	cd frontend && npm install
 
 dev:
+	@echo "Starting development environment..."
+	@echo "Note: Install Docker to use 'make docker-dev' for full containerized development"
+	@echo "Starting backend and frontend separately..."
+	@echo "Backend will be available at http://localhost:8000"
+	@echo "Frontend will be available at http://localhost:3000"
+	@echo ""
+	@echo "Run 'make backend' in one terminal and 'make frontend' in another"
+
+docker-dev:
 	docker-compose up --build
+
+backend:
+	cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+frontend:
+	cd frontend && npm run dev
 
 build:
 	cd frontend && npm run build
