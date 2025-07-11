@@ -12,7 +12,7 @@ help:
 	@echo "  docker-down - Stop Docker containers"
 
 install:
-	pip install -r requirements.txt
+	pip3 install -r requirements.txt
 	cd frontend && npm install
 
 dev:
@@ -28,7 +28,7 @@ docker-dev:
 	docker-compose up --build
 
 backend:
-	cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	cd backend && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 frontend:
 	cd frontend && npm run dev
@@ -37,7 +37,7 @@ build:
 	cd frontend && npm run build
 
 test:
-	python -m pytest backend/tests/
+	python3 -m pytest backend/tests/
 	cd frontend && npm test
 
 clean:

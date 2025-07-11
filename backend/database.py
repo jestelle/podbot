@@ -23,5 +23,5 @@ def get_db():
 
 def create_tables():
     """Create all database tables"""
-    from .models import Base
+    from models import Base
     Base.metadata.create_all(bind=engine)

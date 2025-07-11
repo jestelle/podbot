@@ -1,14 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { PlayIcon, CalendarIcon, DocumentIcon, RssIcon } from '@heroicons/react/24/outline';
+import { authService } from '@/lib/auth';
 
 export default function Home() {
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const router = useRouter();
 
-  const handleGoogleSignIn = () => {
-    // TODO: Implement Google OAuth
-    console.log('Google Sign In clicked');
+  useEffect(() => {
+    // Check if user is already signed in
+    if (authService.isAuthenticated()) {
+      setIsSignedIn(true);
+    }
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    try {
+      const authUrl = await authService.initiateGoogleLogin();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('Failed to initiate Google login:', error);
+      alert('Failed to start Google authentication. Please try again.');
+    }
   };
 
   return (
@@ -32,7 +47,12 @@ export default function Home() {
               ) : (
                 <div className="flex items-center space-x-4">
                   <span className="text-gray-700">Welcome back!</span>
-                  <button className="btn-secondary">Dashboard</button>
+                  <button 
+                    onClick={() => router.push('/dashboard')}
+                    className="btn-secondary"
+                  >
+                    Dashboard
+                  </button>
                 </div>
               )}
             </div>

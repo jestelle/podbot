@@ -11,7 +11,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     google_access_token = Column(Text, nullable=False)
-    google_refresh_token = Column(Text, nullable=False)
+    google_refresh_token = Column(Text, nullable=True)
     rss_feed_url = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
