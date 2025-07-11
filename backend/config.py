@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 class Settings(BaseSettings):
+    # Environment
+    environment: str = "development"
+    
     # Database
     database_url: str = "sqlite:///./podbot.db"
     
@@ -29,6 +32,17 @@ class Settings(BaseSettings):
     # Google Cloud (for production)
     google_cloud_project_id: Optional[str] = None
     google_cloud_storage_bucket: Optional[str] = None
+    
+    # Production overrides
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+    
+    @property
+    def frontend_url(self) -> str:
+        if self.is_production:
+            return "https://podbot.your-domain.com"
+        return "http://localhost:3000"
     
     class Config:
         env_file = ".env"

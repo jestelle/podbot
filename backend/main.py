@@ -17,6 +17,7 @@ from crud import user_crud, podcast_crud
 from dependencies import get_current_active_user
 from content_processor import ContentProcessor
 from podcast_pipeline import podcast_pipeline
+from config import settings
 import models
 
 load_dotenv()
@@ -34,9 +35,19 @@ create_tables()
 app.mount("/audio", StaticFiles(directory="audio_files"), name="audio")
 
 # CORS configuration for frontend
+allowed_origins = [
+    "http://localhost:3000", 
+    "http://127.0.0.1:3000",
+    settings.frontend_url
+]
+
+# Add production frontend URL if different
+if settings.is_production:
+    allowed_origins.append("https://podbot.vercel.app")  # Add your Vercel domain
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Next.js dev server
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
