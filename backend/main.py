@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional, List
 import os
+import logging
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
@@ -13,9 +14,14 @@ from database import get_db, create_tables
 from auth import google_auth, jwt_auth
 from crud import user_crud, podcast_crud
 from dependencies import get_current_active_user
+from content_processor import ContentProcessor
 import models
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Podbot API", version="1.0.0")
 
@@ -171,6 +177,111 @@ async def get_user_rss_feed(user_id: int, db: Session = Depends(get_db)):
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="RSS feed generation not implemented yet"
     )
+
+@app.get("/users/{user_id}/calendar-preview")
+async def get_calendar_preview(
+    user_id: int,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get a preview of user's calendar data"""
+    # Ensure user can only access their own data
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    try:
+        processor = ContentProcessor(
+            access_token=current_user.google_access_token,
+            refresh_token=current_user.google_refresh_token
+        )
+        
+        # Get today's calendar events
+        calendar_events = processor.calendar_service.get_today_events()
+        schedule_analysis = processor.calendar_service.analyze_day_schedule(calendar_events)
+        
+        return {
+            "events": calendar_events,
+            "analysis": schedule_analysis,
+            "calendars_info": processor.calendar_service._get_all_calendars()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching calendar data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch calendar data"
+        )
+
+@app.get("/users/{user_id}/documents-preview")
+async def get_documents_preview(
+    user_id: int,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get a preview of user's recent documents"""
+    # Ensure user can only access their own data
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    try:
+        processor = ContentProcessor(
+            access_token=current_user.google_access_token,
+            refresh_token=current_user.google_refresh_token
+        )
+        
+        # Get recent documents
+        recent_docs = processor.docs_service.get_recent_documents(days=1)
+        shared_docs = processor.docs_service.get_documents_shared_with_user(days=1)
+        
+        return {
+            "recent_documents": recent_docs,
+            "shared_documents": shared_docs
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching documents data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch documents data"
+        )
+
+@app.get("/users/{user_id}/daily-content")
+async def get_daily_content(
+    user_id: int,
+    current_user: models.User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get processed daily content for podcast generation"""
+    # Ensure user can only access their own data
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    try:
+        processor = ContentProcessor(
+            access_token=current_user.google_access_token,
+            refresh_token=current_user.google_refresh_token
+        )
+        
+        # Generate daily content
+        daily_content = processor.generate_daily_content()
+        
+        return daily_content
+        
+    except Exception as e:
+        logger.error(f"Error generating daily content: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate daily content"
+        )
 
 @app.post("/generate-podcast/{user_id}")
 async def generate_podcast(

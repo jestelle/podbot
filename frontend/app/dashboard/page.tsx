@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService, User, PodcastEpisode } from '@/lib/auth';
-import { PlayIcon, CalendarIcon, DocumentIcon, RssIcon } from '@heroicons/react/24/outline';
+import { PlayIcon, CalendarIcon, DocumentIcon, RssIcon, EyeIcon } from '@heroicons/react/24/outline';
 
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [episodes, setEpisodes] = useState<PodcastEpisode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calendarData, setCalendarData] = useState<any>(null);
+  const [documentsData, setDocumentsData] = useState<any>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -52,6 +55,46 @@ export default function Dashboard() {
       const fullRssUrl = `http://localhost:8000${user.rss_feed_url}`;
       navigator.clipboard.writeText(fullRssUrl);
       alert('RSS feed URL copied to clipboard!');
+    }
+  };
+
+  const loadCalendarPreview = async () => {
+    if (!user) return;
+    setLoadingPreview(true);
+    try {
+      const response = await fetch(`http://localhost:8000/users/${user.id}/calendar-preview`, {
+        headers: {
+          'Authorization': `Bearer ${authService.getToken()}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCalendarData(data);
+      }
+    } catch (error) {
+      console.error('Failed to load calendar preview:', error);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const loadDocumentsPreview = async () => {
+    if (!user) return;
+    setLoadingPreview(true);
+    try {
+      const response = await fetch(`http://localhost:8000/users/${user.id}/documents-preview`, {
+        headers: {
+          'Authorization': `Bearer ${authService.getToken()}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDocumentsData(data);
+      }
+    } catch (error) {
+      console.error('Failed to load documents preview:', error);
+    } finally {
+      setLoadingPreview(false);
     }
   };
 
@@ -120,6 +163,107 @@ export default function Dashboard() {
             <code className="text-sm text-gray-800">
               http://localhost:8000{user.rss_feed_url}
             </code>
+          </div>
+        </div>
+
+        {/* Google Data Preview */}
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Calendar Preview</h3>
+              <button
+                onClick={loadCalendarPreview}
+                disabled={loadingPreview}
+                className="btn-secondary flex items-center"
+              >
+                <EyeIcon className="h-4 w-4 mr-1" />
+                {loadingPreview ? 'Loading...' : 'Preview'}
+              </button>
+            </div>
+            
+            {calendarData ? (
+              <div className="space-y-3">
+                <div className="text-sm text-gray-600">
+                  <strong>Today's Schedule:</strong> {calendarData.analysis.total_events} events, {calendarData.analysis.busy_hours} busy hours
+                </div>
+                <div className="text-sm text-gray-600">
+                  <strong>Meeting Density:</strong> {calendarData.analysis.meeting_density}
+                </div>
+                <div className="text-sm text-gray-600">
+                  <strong>Calendars:</strong> {calendarData.calendars_info?.length || 0} calendars accessible
+                </div>
+                {calendarData.events.length === 0 ? (
+                  <div className="text-sm text-gray-500 py-2">
+                    No events found today across {calendarData.calendars_info?.length || 0} calendars
+                  </div>
+                ) : (
+                  calendarData.events.slice(0, 3).map((event: any, index: number) => (
+                    <div key={index} className="border-l-4 border-blue-500 pl-3 py-2">
+                      <div className="font-medium">{event.title}</div>
+                      <div className="text-sm text-gray-600">
+                        {new Date(event.start_time).toLocaleTimeString()} - {new Date(event.end_time).toLocaleTimeString()}
+                      </div>
+                      {event.calendar && (
+                        <div className="text-xs text-gray-500">
+                          📅 {event.calendar.name}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+                {calendarData.events.length > 3 && (
+                  <div className="text-sm text-gray-500">
+                    ... and {calendarData.events.length - 3} more events
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-gray-500">
+                Click "Preview" to see your calendar data
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Documents Preview</h3>
+              <button
+                onClick={loadDocumentsPreview}
+                disabled={loadingPreview}
+                className="btn-secondary flex items-center"
+              >
+                <EyeIcon className="h-4 w-4 mr-1" />
+                {loadingPreview ? 'Loading...' : 'Preview'}
+              </button>
+            </div>
+            
+            {documentsData ? (
+              <div className="space-y-3">
+                <div className="text-sm text-gray-600">
+                  <strong>Recent Documents:</strong> {documentsData.recent_documents.length}
+                </div>
+                <div className="text-sm text-gray-600">
+                  <strong>Shared Documents:</strong> {documentsData.shared_documents.length}
+                </div>
+                {[...documentsData.recent_documents, ...documentsData.shared_documents].slice(0, 3).map((doc: any, index: number) => (
+                  <div key={index} className="border-l-4 border-green-500 pl-3 py-2">
+                    <div className="font-medium">{doc.name}</div>
+                    <div className="text-sm text-gray-600">
+                      Modified: {new Date(doc.modified_time).toLocaleString()}
+                    </div>
+                  </div>
+                ))}
+                {([...documentsData.recent_documents, ...documentsData.shared_documents].length > 3) && (
+                  <div className="text-sm text-gray-500">
+                    ... and {[...documentsData.recent_documents, ...documentsData.shared_documents].length - 3} more documents
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-gray-500">
+                Click "Preview" to see your documents data
+              </div>
+            )}
           </div>
         </div>
 
